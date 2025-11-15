@@ -24,7 +24,10 @@ const formSchema = z.object({
   originAirportCode: z.string().optional(),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
-  tripType: z.enum(['solo', 'couple', 'friends', 'family']),
+  adults: z.number().min(1).max(10),
+  children: z.number().min(0).max(10),
+  roundTrip: z.boolean(),
+  returnDate: z.string().optional(),
   totalBudget: z.string().min(1, 'Budget is required'),
   currency: z.string(),
   comfortLevel: z.enum(['backpacker', 'standard', 'premium']),
@@ -49,7 +52,9 @@ export function TripPlannerForm() {
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      tripType: 'solo',
+      adults: 1,
+      children: 0,
+      roundTrip: false,
       currency: 'EUR',
       comfortLevel: 'standard',
       travelPace: 'balanced',
@@ -115,7 +120,7 @@ export function TripPlannerForm() {
     detectLocation();
   }, [setValue]);
 
-  const tripType = watch('tripType');
+  const roundTrip = watch('roundTrip');
   const currency = watch('currency');
   const comfortLevel = watch('comfortLevel');
   const travelPace = watch('travelPace');
@@ -131,7 +136,10 @@ export function TripPlannerForm() {
         originAirportCode: data.originAirportCode || undefined,
         startDate: data.startDate,
         endDate: data.endDate,
-        tripType: data.tripType,
+        adults: data.adults,
+        children: data.children,
+        roundTrip: data.roundTrip,
+        returnDate: data.roundTrip ? data.returnDate : undefined,
         totalBudget: parseFloat(data.totalBudget),
         currency: data.currency,
         comfortLevel: data.comfortLevel,
@@ -221,20 +229,70 @@ export function TripPlannerForm() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Trip Type</Label>
-              <RadioGroup value={tripType} onValueChange={(value) => setValue('tripType', value as any)}>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {['solo', 'couple', 'friends', 'family'].map((type) => (
-                    <div key={type} className="flex items-center space-x-2">
-                      <RadioGroupItem value={type} id={type} />
-                      <Label htmlFor={type} className="capitalize cursor-pointer">
-                        {type}
-                      </Label>
-                    </div>
-                  ))}
+            <div className="space-y-4">
+              <Label>Travelers</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="adults" className="text-slate-700">Adults</Label>
+                  <Input
+                    id="adults"
+                    type="number"
+                    min="1"
+                    max="10"
+                    {...register('adults', { valueAsNumber: true })}
+                    className="bg-white border-slate-200"
+                  />
+                  {errors.adults && (
+                    <p className="text-sm text-red-500">{errors.adults.message}</p>
+                  )}
                 </div>
-              </RadioGroup>
+
+                <div className="space-y-2">
+                  <Label htmlFor="children" className="text-slate-700">Children</Label>
+                  <Input
+                    id="children"
+                    type="number"
+                    min="0"
+                    max="10"
+                    {...register('children', { valueAsNumber: true })}
+                    className="bg-white border-slate-200"
+                  />
+                  {errors.children && (
+                    <p className="text-sm text-red-500">{errors.children.message}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="roundTrip"
+                  checked={roundTrip}
+                  onChange={(e) => setValue('roundTrip', e.target.checked)}
+                  className="h-4 w-4 text-sky-600 border-slate-300 rounded focus:ring-sky-500"
+                />
+                <Label htmlFor="roundTrip" className="text-slate-700 cursor-pointer">
+                  Round Trip
+                </Label>
+              </div>
+
+              {roundTrip && (
+                <div className="space-y-2">
+                  <Label htmlFor="returnDate" className="text-slate-700">Return Date</Label>
+                  <Input
+                    id="returnDate"
+                    type="date"
+                    {...register('returnDate')}
+                    className="bg-white border-slate-200"
+                    min={watch('startDate')}
+                  />
+                  {errors.returnDate && (
+                    <p className="text-sm text-red-500">{errors.returnDate.message}</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

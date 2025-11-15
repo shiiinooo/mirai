@@ -27,7 +27,10 @@ export function TripHeader({ trip }: TripHeaderProps) {
 
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-white" />
-            <span className="capitalize">{trip.tripType} trip</span>
+            <span>
+              {trip.adults} {trip.adults === 1 ? 'adult' : 'adults'}
+              {trip.children > 0 && `, ${trip.children} ${trip.children === 1 ? 'child' : 'children'}`}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">

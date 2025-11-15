@@ -81,11 +81,17 @@ def create_trip_planner_graph() -> StateGraph:
     workflow.add_edge("activities", "story_generator")
     
     # All branches converge into budget_coordinator
+    # Use a single convergence point to prevent duplicate executions
+    # All parallel nodes complete, then budget_coordinator runs once
     workflow.add_edge("transport", "budget_coordinator")
     workflow.add_edge("accommodation", "budget_coordinator")
     workflow.add_edge("dining", "budget_coordinator")
     workflow.add_edge("key_phrases", "budget_coordinator")
     workflow.add_edge("story_generator", "budget_coordinator")
+    
+    # Ensure budget_coordinator only executes once by checking if it has already run
+    # This is handled by the guard in the node itself, but we also need to ensure
+    # LangGraph doesn't trigger it multiple times from parallel edges
     
     # Phase 2: Budget coordinator with conditional routing
     workflow.add_conditional_edges(

@@ -39,8 +39,11 @@ export function TripOverview({ trip }: TripOverviewProps) {
         <div className="flex items-start gap-3">
           <Users className="h-5 w-5 text-sky-400 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm text-slate-600">Trip Type</p>
-            <p className="text-sm font-medium text-slate-900 capitalize">{trip.tripType}</p>
+            <p className="text-sm text-slate-600">Travelers</p>
+            <p className="text-sm font-medium text-slate-900">
+              {trip.adults} {trip.adults === 1 ? 'adult' : 'adults'}
+              {trip.children > 0 && `, ${trip.children} ${trip.children === 1 ? 'child' : 'children'}`}
+            </p>
           </div>
         </div>
 

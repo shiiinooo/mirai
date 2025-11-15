@@ -269,7 +269,8 @@ def search_flights(
     if travel_dates and travel_dates.get("start"):
         try:
             outbound_date = travel_dates["start"]
-            return_date = travel_dates.get("end")
+            # Check for round trip return date (stored in "return" key)
+            return_date = travel_dates.get("return") or travel_dates.get("end")
             
             # Extract or get airport codes
             departure_id = None
@@ -578,14 +579,31 @@ def search_hotels(
             # "Paris, France" -> "Paris"
             query_destination = destination.split(",")[0].strip()
             
+            # Get traveler counts from constraints
+            adults = constraints.get("adults", 2) if constraints else 2
+            children = constraints.get("children", 0) if constraints else 0
+            currency = constraints.get("currency", "EUR") if constraints else "EUR"
+            
+            # Generate children_ages if children are specified but ages not provided
+            # SerpAPI requires children_ages to match the number of children
+            # Default to age 8 for each child (reasonable default for hotel searches)
+            children_ages = None
+            if children > 0:
+                children_ages = constraints.get("children_ages") if constraints else None
+                if not children_ages:
+                    # Generate default ages: assume all children are 8 years old
+                    # Format: comma-separated string like "8,8" for 2 children
+                    children_ages = ",".join(["8"] * children)
+            
             # Call SerpAPI
             data = _search_hotels_serpapi(
                 q=query_destination,
                 check_in_date=check_in,
                 check_out_date=check_out,
-                currency="EUR",
-                adults=2,
-                children=0,
+                currency=currency,
+                adults=adults,
+                children=children,
+                children_ages=children_ages,
                 sort_by=sort_by,
                 max_price=max_price,
                 hotel_class=hotel_class,
@@ -1092,7 +1110,8 @@ def estimate_costs(
     accommodation: Optional[Dict[str, Any]],
     activities: List[Dict[str, Any]],
     restaurants: List[Dict[str, Any]],
-    duration: int
+    duration: int,
+    num_travelers: int = 1
 ) -> Dict[str, float]:
     """
     Calculate estimated costs for the trip.
@@ -1103,26 +1122,40 @@ def estimate_costs(
         activities: List of selected activities
         restaurants: List of selected restaurants
         duration: Trip duration in days
+        num_travelers: Number of travelers (adults + children)
     
     Returns:
         Dictionary with cost breakdown
     """
     # Calculate transport cost (handle both single flight and round trip)
+    # Transport prices from API are typically per person, so multiply by travelers
     transport_cost = 0
     if transport:
         if isinstance(transport, list):
             # Round trip with multiple flights
-            transport_cost = sum(flight.get("price", 0) for flight in transport)
+            transport_cost = sum(flight.get("price", 0) for flight in transport) * num_travelers
         else:
             # Single flight
-            transport_cost = transport.get("price", 0)
+            transport_cost = transport.get("price", 0) * num_travelers
+    
+    # Accommodation total_price is typically for the room, not per person
+    accommodation_cost = accommodation["total_price"] if accommodation else 0
+    
+    # Activities might be per person or per group - assume per person for now
+    activities_cost = sum(act.get("price", 0) for act in activities) * num_travelers
+    
+    # Dining is per person, so multiply by travelers
+    dining_cost = sum(rest.get("avg_cost_per_person", 0) for rest in restaurants) * num_travelers
+    
+    # Miscellaneous expenses per person per day
+    miscellaneous_cost = duration * 20 * num_travelers
     
     costs = {
         "transport": transport_cost,
-        "accommodation": accommodation["total_price"] if accommodation else 0,
-        "activities": sum(act.get("price", 0) for act in activities),
-        "dining": sum(rest.get("avg_cost_per_person", 0) for rest in restaurants),
-        "miscellaneous": duration * 20  # Daily misc expenses
+        "accommodation": accommodation_cost,
+        "activities": activities_cost,
+        "dining": dining_cost,
+        "miscellaneous": miscellaneous_cost
     }
     
     costs["total"] = sum(costs.values())

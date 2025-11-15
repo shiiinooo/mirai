@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { TripHeader } from '@/components/trip/TripHeader';
@@ -10,10 +10,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, Home, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertCircle, Home, ChevronLeft, ChevronRight, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { getTrip } from '@/lib/api/trips';
+import { getPhraseAudio } from '@/lib/api/phrases';
 import { Trip } from '@/types/trip';
 import { demoTrip } from '@/lib/demo-data';
+
+interface PhraseAudioState {
+  isLoading: boolean;
+  isPlaying: boolean;
+  audio: HTMLAudioElement | null;
+  error: string | null;
+}
 
 export function TripPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +29,8 @@ export function TripPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
+  const [phraseAudioStates, setPhraseAudioStates] = useState<{ [key: number]: PhraseAudioState }>({});
+  const phraseAudioRefs = useRef<{ [key: number]: HTMLAudioElement | null }>({});
 
   useEffect(() => {
     async function loadTrip() {
@@ -52,6 +62,99 @@ export function TripPage() {
 
     loadTrip();
   }, [id]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(phraseAudioRefs.current).forEach((audio) => {
+        if (audio) {
+          audio.pause();
+          audio.src = '';
+        }
+      });
+    };
+  }, []);
+
+  const handlePlayPhraseAudio = async (phraseIndex: number, phrase: string, language?: string) => {
+    const currentState = phraseAudioStates[phraseIndex];
+    
+    // If audio is already loaded and playing, pause it
+    if (currentState?.isPlaying && currentState.audio) {
+      currentState.audio.pause();
+      setPhraseAudioStates((prev) => ({
+        ...prev,
+        [phraseIndex]: { ...prev[phraseIndex], isPlaying: false },
+      }));
+      return;
+    }
+
+    // If audio is already loaded but paused, resume it
+    if (currentState?.audio && !currentState.isPlaying) {
+      currentState.audio.play();
+      setPhraseAudioStates((prev) => ({
+        ...prev,
+        [phraseIndex]: { ...prev[phraseIndex], isPlaying: true },
+      }));
+      return;
+    }
+
+    // Load and play new audio
+    setPhraseAudioStates((prev) => ({
+      ...prev,
+      [phraseIndex]: { isLoading: true, isPlaying: false, audio: null, error: null },
+    }));
+
+    try {
+      const audioBlob = await getPhraseAudio(phrase, language);
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+
+      // Set up event listeners
+      audio.onended = () => {
+        setPhraseAudioStates((prev) => ({
+          ...prev,
+          [phraseIndex]: { ...prev[phraseIndex], isPlaying: false },
+        }));
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      audio.onerror = () => {
+        setPhraseAudioStates((prev) => ({
+          ...prev,
+          [phraseIndex]: {
+            ...prev[phraseIndex],
+            isLoading: false,
+            isPlaying: false,
+            error: 'Failed to play audio',
+          },
+        }));
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      audio.onplay = () => {
+        setPhraseAudioStates((prev) => ({
+          ...prev,
+          [phraseIndex]: { ...prev[phraseIndex], isPlaying: true, isLoading: false },
+        }));
+      };
+
+      // Store audio reference
+      phraseAudioRefs.current[phraseIndex] = audio;
+
+      // Play audio
+      await audio.play();
+    } catch (err) {
+      setPhraseAudioStates((prev) => ({
+        ...prev,
+        [phraseIndex]: {
+          isLoading: false,
+          isPlaying: false,
+          audio: null,
+          error: err instanceof Error ? err.message : 'Failed to load audio',
+        },
+      }));
+    }
+  };
 
   if (isLoading) {
     return (
@@ -526,26 +629,49 @@ export function TripPage() {
                           </AccordionTrigger>
                           <AccordionContent>
                             <div className="space-y-3">
-                              {trip.essentials.keyPhrases.map((phrase, idx) => (
-                                <div
-                                  key={idx}
-                                  className="p-3 rounded-lg bg-slate-50 border border-slate-200"
-                                >
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <p className="font-medium text-slate-900">{phrase.phrase}</p>
-                                      <p className="text-sm text-slate-600 mt-1">
-                                        {phrase.translation}
-                                      </p>
-                                      {phrase.pronunciation && (
-                                        <p className="text-xs text-sky-600 mt-1">
-                                          {phrase.pronunciation}
+                              {trip.essentials.keyPhrases.map((phrase, idx) => {
+                                const audioState = phraseAudioStates[idx];
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="p-3 rounded-lg bg-slate-50 border border-slate-200"
+                                  >
+                                    <div className="flex justify-between items-start gap-3">
+                                      <div className="flex-1">
+                                        <p className="font-medium text-slate-900">{phrase.phrase}</p>
+                                        <p className="text-sm text-slate-600 mt-1">
+                                          {phrase.translation}
                                         </p>
-                                      )}
+                                        {phrase.pronunciation && (
+                                          <p className="text-xs text-sky-600 mt-1">
+                                            {phrase.pronunciation}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handlePlayPhraseAudio(idx, phrase.phrase)}
+                                        disabled={audioState?.isLoading}
+                                        className="h-8 w-8 p-0 flex-shrink-0"
+                                        title={
+                                          audioState?.isPlaying
+                                            ? 'Pause pronunciation'
+                                            : 'Play pronunciation'
+                                        }
+                                      >
+                                        {audioState?.isLoading ? (
+                                          <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
+                                        ) : audioState?.isPlaying ? (
+                                          <VolumeX className="h-4 w-4 text-sky-600" />
+                                        ) : (
+                                          <Volume2 className="h-4 w-4 text-sky-600" />
+                                        )}
+                                      </Button>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </AccordionContent>
                         </AccordionItem>

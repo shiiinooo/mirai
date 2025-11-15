@@ -8,19 +8,34 @@ export async function planTrip(request: TripPlanRequest): Promise<Trip> {
     body: JSON.stringify(request),
   });
 
-  await supabase.from('trips').insert({
-    id: trip.id,
-    destination: trip.destination,
-    start_date: trip.startDate,
-    end_date: trip.endDate,
-    trip_type: trip.tripType,
-    trip_data: trip,
-  });
+  // Only save to Supabase if it's configured
+  if (supabase) {
+    const { error: insertError } = await supabase.from('trips').insert({
+      id: trip.id,
+      destination: trip.destination,
+      start_date: trip.startDate,
+      end_date: trip.endDate,
+      adults: trip.adults,
+      children: trip.children,
+      trip_data: trip,
+    });
+
+    if (insertError) {
+      console.error('Failed to save trip to Supabase:', insertError);
+      // Don't throw - trip was successfully generated, just failed to save to DB
+    }
+  } else {
+    console.log('Supabase not configured - trip not saved to database');
+  }
 
   return trip;
 }
 
 export async function getTrip(id: string): Promise<Trip | null> {
+  if (!supabase) {
+    throw new Error('Supabase not configured - cannot retrieve saved trips');
+  }
+
   const { data, error } = await supabase
     .from('trips')
     .select('trip_data')

@@ -5,7 +5,8 @@ export const demoTrip: Trip = {
   destination: 'Tokyo, Japan',
   startDate: '2024-12-15',
   endDate: '2024-12-22',
-  tripType: 'couple',
+  adults: 2,
+  children: 0,
   createdAt: new Date().toISOString(),
   days: [
     {

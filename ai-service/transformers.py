@@ -40,7 +40,7 @@ def transform_request_to_state(request) -> Dict[str, Any]:
         "packed": 8      # 8km per day
     }
     
-    # Build constraints
+    # Build constraints with traveler information
     constraints = {
         "comfort_level": comfort_mapping.get(request.comfortLevel, "mid"),
         "walking_distance": pace_to_distance.get(request.travelPace, 5),
@@ -48,16 +48,25 @@ def transform_request_to_state(request) -> Dict[str, Any]:
         # Add airport codes if provided
         "departure_airport_code": getattr(request, "originAirportCode", None),
         "arrival_airport_code": getattr(request, "destinationAirportCode", None),
+        # Add traveler counts for flight and hotel searches
+        "adults": getattr(request, "adults", 1),
+        "children": getattr(request, "children", 0),
+        "currency": getattr(request, "currency", "EUR"),
     }
+    
+    # Build travel dates with round trip support
+    travel_dates = {
+        "start": request.startDate,
+        "end": request.endDate
+    }
+    if getattr(request, "roundTrip", False) and getattr(request, "returnDate", None):
+        travel_dates["return"] = request.returnDate
     
     # Build initial state
     initial_state = {
         "destination": request.destination,
         "origin": request.origin,  # Get origin from frontend request
-        "travel_dates": {
-            "start": request.startDate,
-            "end": request.endDate
-        },
+        "travel_dates": travel_dates,
         "duration": duration,
         "budget": request.totalBudget,
         "preferred_activities": request.preferredActivities,
@@ -328,7 +337,8 @@ def transform_result_to_trip(result: Dict[str, Any], request) -> Dict[str, Any]:
         "destination": request.destination,
         "startDate": request.startDate,
         "endDate": request.endDate,
-        "tripType": request.tripType,
+        "adults": getattr(request, "adults", 1),
+        "children": getattr(request, "children", 0),
         "days": days,
         "budget": budget,
         "essentials": essentials,
@@ -445,13 +455,28 @@ def extract_activities_for_slot(
         activity_name = slot_data.get("activity", "Activity")
         
         # Try to find matching activity in selected_activities by name
+        # Use fuzzy matching to handle slight name variations
         matching_activity = None
         matching_activity_id = None
+        
+        # Normalize activity name for comparison (lowercase, strip whitespace)
+        normalized_activity_name = activity_name.lower().strip()
+        
         for selected_activity in selected_activities:
-            if selected_activity.get("name", "").lower() == activity_name.lower():
+            selected_name = selected_activity.get("name", "").lower().strip()
+            # Exact match
+            if selected_name == normalized_activity_name:
                 matching_activity = selected_activity
                 matching_activity_id = selected_activity.get("id", "")
                 break
+            # Partial match (activity name contains selected name or vice versa)
+            elif normalized_activity_name in selected_name or selected_name in normalized_activity_name:
+                matching_activity = selected_activity
+                matching_activity_id = selected_activity.get("id", "")
+                # Don't break - continue to look for exact match
+                # But if we find one, use it
+                if len(selected_name) == len(normalized_activity_name):
+                    break
         
         activity = {
             "id": f"act-{day_plan.get('day', 0)}-{slot_name}",
@@ -466,12 +491,60 @@ def extract_activities_for_slot(
         
         # Attach story for audio playback (but don't display the text)
         # Use the original activity ID to look up the story
+        story = None
+        story_activity_id = None
+        
         if matching_activity_id and activity_stories:
+            # Try to get story by activity ID (preferred method)
             story = activity_stories.get(matching_activity_id)
             if story:
-                activity["story"] = story
-                # Also store the original activity ID for audio API lookup
-                activity["original_activity_id"] = matching_activity_id
+                story_activity_id = matching_activity_id
+        
+        # Fallback: If story not found by ID, try to find it by searching through all activities
+        # This handles cases where activity name doesn't match exactly
+        if not story and activity_stories and selected_activities:
+            # Try to find story by searching for similar activity names
+            normalized_search_name = normalized_activity_name
+            for selected_activity in selected_activities:
+                selected_name = selected_activity.get("name", "").lower().strip()
+                # Check if names are similar (one contains the other)
+                if (normalized_search_name in selected_name or selected_name in normalized_search_name) and len(selected_name) > 3:
+                    potential_id = selected_activity.get("id", "")
+                    if potential_id and potential_id in activity_stories:
+                        story = activity_stories.get(potential_id)
+                        story_activity_id = potential_id
+                        break
+        
+        # Last resort: Try to find story by iterating through all activity_stories
+        # and matching by name (in case ID structure is different)
+        if not story and activity_stories:
+            # This is a fallback - try to match by finding activities with similar names
+            # and checking if their stories exist
+            for story_id, story_text in activity_stories.items():
+                # Try to find the activity that has this story ID
+                for selected_activity in selected_activities:
+                    if selected_activity.get("id") == story_id:
+                        selected_name = selected_activity.get("name", "").lower().strip()
+                        # If names match, use this story
+                        if (normalized_activity_name in selected_name or selected_name in normalized_activity_name):
+                            story = story_text
+                            story_activity_id = story_id
+                            break
+                if story:
+                    break
+        
+        # Attach story if found
+        if story and story_activity_id:
+            activity["story"] = story
+            # Also store the original activity ID for audio API lookup
+            activity["original_activity_id"] = story_activity_id
+        else:
+            # Debug logging to help diagnose missing stories
+            if activity_stories:
+                print(f"   [DEBUG] Story not found for '{activity_name}'")
+                print(f"   [DEBUG] Matched activity ID: {matching_activity_id}")
+                print(f"   [DEBUG] Total stories available: {len(activity_stories)}")
+                print(f"   [DEBUG] Sample story IDs: {list(activity_stories.keys())[:3]}")
         
         activities.append(activity)
     

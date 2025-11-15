@@ -85,7 +85,10 @@ class TripPlanRequest(BaseModel):
     originAirportCode: Optional[str] = Field(None, description="Origin airport code (e.g., JFK)")
     startDate: str = Field(..., description="Start date in YYYY-MM-DD format")
     endDate: str = Field(..., description="End date in YYYY-MM-DD format")
-    tripType: Literal["solo", "couple", "friends", "family"] = Field(..., description="Type of trip")
+    adults: int = Field(1, ge=1, le=10, description="Number of adults")
+    children: int = Field(0, ge=0, le=10, description="Number of children")
+    roundTrip: bool = Field(False, description="Whether this is a round trip")
+    returnDate: Optional[str] = Field(None, description="Return date for round trips in YYYY-MM-DD format")
     totalBudget: float = Field(..., description="Total budget for the trip")
     currency: str = Field(default="EUR", description="Currency code (USD, EUR, etc.)")
     comfortLevel: Literal["backpacker", "standard", "premium"] = Field(..., description="Accommodation comfort level")
@@ -258,6 +261,69 @@ async def get_activity_audio(activity_id: str, trip_id: Optional[str] = None, st
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate activity audio: {str(e)}"
+        )
+
+
+@app.get("/v1/phrases/audio")
+async def get_phrase_audio(phrase: str, language: Optional[str] = None):
+    """
+    Generate audio for a key phrase pronunciation using Eleven Labs TTS.
+    
+    Args:
+        phrase: The phrase text to pronounce
+        language: Optional language code (for voice selection)
+    
+    Returns:
+        Audio stream (MP3 format)
+    """
+    try:
+        if not phrase or not phrase.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Phrase text is required"
+            )
+        
+        # Generate audio
+        try:
+            # Use a voice appropriate for the language if specified
+            # Default voice works well for most languages
+            voice_id = "21m00Tcm4TlvDq8ikWAM"  # Default neutral voice
+            
+            # You can add language-specific voice mapping here if needed
+            # if language == "ar":  # Arabic
+            #     voice_id = "specific_arabic_voice_id"
+            # elif language == "fr":  # French
+            #     voice_id = "specific_french_voice_id"
+            
+            audio_bytes = generate_audio_from_text(phrase.strip(), voice_id=voice_id)
+        except ValueError as e:
+            # API key not set
+            raise HTTPException(
+                status_code=500,
+                detail=f"TTS service not configured: {str(e)}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate audio: {str(e)}"
+            )
+        
+        # Return audio as streaming response
+        audio_stream = BytesIO(audio_bytes)
+        return StreamingResponse(
+            audio_stream,
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": f"attachment; filename=phrase_{hash(phrase)}.mp3"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate phrase audio: {str(e)}"
         )
 
 

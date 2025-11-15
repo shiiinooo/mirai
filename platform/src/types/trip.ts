@@ -114,7 +114,8 @@ export interface Trip {
   destination: string;
   startDate: string;
   endDate: string;
-  tripType: 'solo' | 'couple' | 'friends' | 'family';
+  adults: number;
+  children: number;
   days: Day[];
   budget: BudgetSummary;
   essentials: TravelEssentials;
@@ -131,7 +132,10 @@ export interface TripPlanRequest {
   originAirportCode?: string;
   startDate: string;
   endDate: string;
-  tripType: 'solo' | 'couple' | 'friends' | 'family';
+  adults: number;
+  children: number;
+  roundTrip: boolean;
+  returnDate?: string;
   totalBudget: number;
   currency: string;
   comfortLevel: 'backpacker' | 'standard' | 'premium';

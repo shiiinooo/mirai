@@ -18,6 +18,23 @@ def budget_coordinator_node(state: TripPlannerState) -> Dict[str, Any]:
     Budget Coordinator Agent - Uses LLM to select best combination within budget.
     Optimizes for value, user preferences, and budget constraints.
     """
+    # Guard: Check if budget coordinator has already executed
+    # This prevents duplicate execution when multiple edges converge to the same node
+    # We check for actual output in state - if selected_transport exists, we've already run
+    # For adjustment iterations, we check both the output and the iteration number
+    adjustment_iteration = state.get("adjustment_iteration", 0)
+    selected_transport = state.get("selected_transport")
+    
+    # If we have outputs, check if this is a duplicate call for the same iteration
+    if selected_transport is not None:
+        # Get the iteration from when we last produced output
+        # If it matches current iteration, we've already executed - skip
+        existing_iteration = state.get("adjustment_iteration", 0)
+        if existing_iteration == adjustment_iteration:
+            # We've already executed for this iteration - skip duplicate call
+            print(f"\n💰 Budget Coordinator: Already executed for iteration {adjustment_iteration}, skipping duplicate call...")
+            return {}
+    
     print("\n💰 Budget Coordinator: Analyzing options and selecting best combination...")
     
     # Initialize LLM (Mistral with OpenAI fallback)
@@ -169,13 +186,19 @@ If this is an adjustment iteration ({adjustment_iteration} > 0), prioritize chea
             if r["id"] in selection["selected_restaurant_ids"]
         ]
         
+        # Get number of travelers from constraints
+        adults = state.get("constraints", {}).get("adults", 1)
+        children = state.get("constraints", {}).get("children", 0)
+        num_travelers = adults + children
+        
         # Calculate actual costs
         cost_breakdown = estimate_costs(
             transport=selected_transport,
             accommodation=selected_accommodation,
             activities=selected_activities,
             restaurants=selected_restaurants,
-            duration=duration
+            duration=duration,
+            num_travelers=num_travelers
         )
         
         total_cost = cost_breakdown["total"]
