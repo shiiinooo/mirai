@@ -111,8 +111,8 @@ export function AirportInput({
             aria-expanded={open}
             disabled={disabled}
             className={cn(
-              'w-full justify-between bg-white border-slate-200 text-slate-900 hover:bg-slate-50',
-              !selectedAirport && 'text-slate-500'
+              'w-full justify-between bg-white border-slate-200 text-slate-900 hover:bg-slate-50 hover:text-slate-900',
+              !selectedAirport && 'text-slate-500 hover:text-slate-700'
             )}
           >
             <div className="flex items-center gap-2 truncate">
