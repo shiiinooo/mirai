@@ -1,0 +1,50 @@
+services:
+  backend:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: mirai-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ai-service/.env
+    # Environment variables will be loaded from env_file above
+    # If you want to override, uncomment and set values:
+    # environment:
+    #   - OPENAI_API_KEY=${OPENAI_API_KEY}
+    #   - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+    #   - SERPAPI_API_KEY=${SERPAPI_API_KEY}
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mirai-network
+    # Remove volumes in production - code is baked into image
+    # volumes:
+    #   - ./ai-service:/app
+
+  frontend:
+    build:
+      context: ./platform
+      dockerfile: Dockerfile
+      args:
+        # Default to backend service name for docker network
+        - VITE_API_URL=http://backend:8000
+    container_name: mirai-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+    networks:
+      - mirai-network
+
+networks:
+  mirai-network:
+    driver: bridge
+

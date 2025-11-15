@@ -1,0 +1,73 @@
+services:
+  backend:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: mirai-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ai-service/.env
+    # Environment variables will be loaded from env_file above
+    # If you want to override, uncomment and set values:
+    # environment:
+    #   - OPENAI_API_KEY=${OPENAI_API_KEY}
+    #   - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+    #   - SERPAPI_API_KEY=${SERPAPI_API_KEY}
+    environment:
+      # Use Docker service name for Qdrant when running in Docker
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    volumes:
+      # Mount code for development (remove in production)
+      - ./ai-service:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mirai-network
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: mirai-qdrant
+    ports:
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+    networks:
+      - mirai-network
+
+  frontend:
+    build:
+      context: ./platform
+      dockerfile: Dockerfile
+      args:
+        # Use relative paths - nginx will proxy to backend
+        # Leave empty to use relative paths, or set to http://localhost:8000 for local dev
+        - VITE_API_URL=
+    container_name: mirai-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - mirai-network
+
+networks:
+  mirai-network:
+    driver: bridge
+
+volumes:
+  qdrant_storage:
+    driver: local
+

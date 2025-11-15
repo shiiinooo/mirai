@@ -1,0 +1,11 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "trip_planner": "./trip_planner/agent.py:graph"
+  },
+  "env": ".env",
+  "python_version": "3.11"
+}
+
