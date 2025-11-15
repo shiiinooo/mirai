@@ -38,7 +38,11 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-export function TripPlannerForm() {
+interface TripPlannerFormProps {
+  onLoadingChange?: (isLoading: boolean) => void;
+}
+
+export function TripPlannerForm({ onLoadingChange }: TripPlannerFormProps) {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -127,6 +131,7 @@ export function TripPlannerForm() {
 
   const onSubmit = async (data: FormData) => {
     setIsLoading(true);
+    onLoadingChange?.(true);
 
     try {
       const request: TripPlanRequest = {
@@ -157,8 +162,8 @@ export function TripPlannerForm() {
     } catch (error) {
       console.error('Error planning trip:', error);
       toast.error('Failed to generate trip plan. Please try again.');
-    } finally {
       setIsLoading(false);
+      onLoadingChange?.(false);
     }
   };
 

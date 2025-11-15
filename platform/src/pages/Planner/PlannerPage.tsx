@@ -1,11 +1,18 @@
+import { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { TripPlannerForm } from '@/components/planner/TripPlannerForm';
+import { TripPlanningLoading } from '@/components/planner/TripPlanningLoading';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function PlannerPage() {
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
+
+  if (isLoading) {
+    return <TripPlanningLoading />;
+  }
 
   return (
     <AppShell>
@@ -34,7 +41,7 @@ export function PlannerPage() {
 
         {/* Trip Planner Form */}
         <div className="max-w-3xl mx-auto">
-          <TripPlannerForm />
+          <TripPlannerForm onLoadingChange={setIsLoading} />
         </div>
       </div>
     </AppShell>
